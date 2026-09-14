@@ -47,10 +47,20 @@ function headers(token: string | undefined): Record<string, string> {
 
 class HttpError extends Error {
   readonly status: number;
-  constructor(status: number, path: string) {
-    super(`GitHub ${String(status)} for ${path}`);
+  constructor(status: number, path: string, hint?: string) {
+    super(`GitHub ${String(status)} for ${path}${hint === undefined ? "" : ` (${hint})`}`);
     this.status = status;
   }
+}
+
+/**
+ * GitHub answers 404, not 403, for a private repository the caller cannot
+ * see, so a 404 with no token is most likely a private repository rather than
+ * a missing one. The hint names the variable only; the value is never read.
+ */
+function privateRepoHint(status: number, token: string | undefined): string | undefined {
+  if (status !== 404 || (token !== undefined && token.length > 0)) return undefined;
+  return "private repository? set GITHUB_TOKEN";
 }
 
 async function getJson(fetchFn: typeof fetch, url: string, token: string | undefined, timeoutMs: number): Promise<unknown> {
@@ -58,7 +68,7 @@ async function getJson(fetchFn: typeof fetch, url: string, token: string | undef
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetchFn(url, { headers: headers(token), signal: ctrl.signal });
-    if (!res.ok) throw new HttpError(res.status, new URL(url).pathname);
+    if (!res.ok) throw new HttpError(res.status, new URL(url).pathname, privateRepoHint(res.status, token));
     return (await res.json()) as unknown;
   } finally {
     clearTimeout(timer);

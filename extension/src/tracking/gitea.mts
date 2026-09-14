@@ -610,17 +610,47 @@ export function defaultRepo(env: NodeJS.ProcessEnv = process.env): TrackingRepo 
   return { host: host.replace(/\/+$/, ""), owner, repo, provider: "gitea" };
 }
 
-/** Parse `git remote get-url` output into host/owner/repo. Undefined when unrecognized. */
+/**
+ * Canonical form of a forge host for comparisons and bindings: scheme and
+ * hostname lowercased, trailing slashes dropped, and the `www.` alias of
+ * github.com folded onto `https://github.com` so a remote cloned as
+ * `www.github.com/org/repo.git` binds to the same tracker as `github.com`
+ * (and `http://github.com` onto https, which is all GitHub serves). Other
+ * hosts keep their `www.` and scheme — on a self-hosted forge each may be a
+ * distinct name. Returns the trimmed input when it is not an http(s) origin.
+ */
+export function canonicalHost(host: string): string {
+  const trimmed = host.trim().replace(/\/+$/, "");
+  const m = trimmed.match(/^(https?):\/\/([^/]+)$/i);
+  if (!m?.[1] || !m?.[2]) return trimmed;
+  let hostname = m[2].toLowerCase();
+  if (/^www\.github\.com$/.test(hostname)) hostname = "github.com";
+  // github.com is https-only; an http:// clone URL names the same forge.
+  const scheme = hostname === "github.com" ? "https" : m[1].toLowerCase();
+  return `${scheme}://${hostname}`;
+}
+
+/**
+ * Parse `git remote get-url` output into host/owner/repo. Undefined when
+ * unrecognized. Accepts `git@host:owner/repo.git`, `ssh://git@host[:port]/owner/repo.git`
+ * and `http(s)://[user[:token]@]host/owner/repo[.git][/]`; any userinfo in an
+ * https remote is dropped and never returned. The host is canonicalized
+ * (see `canonicalHost`), so `www.github.com` yields `https://github.com`.
+ */
 export function parseGitRemote(remoteUrl: string): TrackingRepo | undefined {
   const trimmed = remoteUrl.trim();
   if (!trimmed) return undefined;
-  let m = trimmed.match(/^git@([^:]+):([^/]+)\/(.+?)(?:\.git)?$/);
+  let m = trimmed.match(/^git@([^:/]+):\/?([^/]+)\/(.+?)(?:\.git)?\/?$/);
   if (m?.[1] && m?.[2] && m?.[3]) {
-    return { host: `https://${m[1]}`, owner: m[2], repo: m[3] };
+    return { host: canonicalHost(`https://${m[1]}`), owner: m[2], repo: m[3] };
   }
-  m = trimmed.match(/^(https?:\/\/[^/]+)\/([^/]+)\/(.+?)(?:\.git)?$/);
+  m = trimmed.match(/^ssh:\/\/(?:[^@/]+@)?([^:/]+)(?::\d+)?\/([^/]+)\/(.+?)(?:\.git)?\/?$/i);
   if (m?.[1] && m?.[2] && m?.[3]) {
-    return { host: m[1], owner: m[2], repo: m[3] };
+    return { host: canonicalHost(`https://${m[1]}`), owner: m[2], repo: m[3] };
+  }
+  m = trimmed.match(/^(https?):\/\/(?:[^@/]+@)?([^/@]+)\/([^/]+)\/(.+?)(?:\.git)?\/?$/i);
+  if (m?.[1] && m?.[2] && m?.[3] && m?.[4]) {
+    return { host: canonicalHost(`${m[1]}://${m[2]}`), owner: m[3], repo: m[4] };
   }
   return undefined;
 }

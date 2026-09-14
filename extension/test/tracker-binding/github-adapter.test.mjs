@@ -127,6 +127,29 @@ test('resolveTracker: gitea by default, github only when asked, and misconfigura
   assert.doesNotMatch(JSON.stringify(resolveTracker({ GITEA_TOKEN: 'secret-token' })), /secret-token/);
 });
 
+test('a private repository: www.github.com remotes fill the binding and a tokenless 404 names GITHUB_TOKEN', async () => {
+  const www = resolveTracker({ PROMPTR_TRACKER: 'github' }, 'https://www.github.com/octo/demo.git');
+  assert.equal(www.ok, true);
+  assert.deepEqual(www.config.repo, GH);
+  assert.equal(githubApiBase(www.config.repo), 'https://api.github.com/repos/octo/demo');
+  const wwwHost = resolveTracker({ PROMPTR_TRACKER: 'github', GITHUB_HOST: 'https://www.github.com' }, 'git@github.com:octo/demo.git');
+  assert.equal(wwwHost.ok, true);
+  assert.equal(wwwHost.config.repo.owner, 'octo');
+
+  // GitHub hides private repositories behind 404; without a token the hint says so.
+  const hidden = fakeFetch({ '/issues?': { __status: 404 } });
+  await assert.rejects(fetchIssuePageGitHub({ repo: GH, page: 1, fetchFn: hidden }), /GitHub 404 for \/repos\/octo\/demo\/issues \(private repository\? set GITHUB_TOKEN\)/);
+  // With a token present the 404 is a plain 404 and the token is never echoed.
+  await assert.rejects(fetchIssuePageGitHub({ repo: GH, page: 1, token: 'ghp_secret', fetchFn: hidden }), (error) => {
+    assert.equal(error.message, 'GitHub 404 for /repos/octo/demo/issues');
+    return true;
+  });
+  assert.equal(hidden.calls.at(-1).headers.Authorization, 'Bearer ghp_secret');
+  // Other statuses carry no private-repository guess.
+  const forbidden = fakeFetch({ '/issues?': { __status: 403 } });
+  await assert.rejects(fetchIssuePageGitHub({ repo: GH, page: 1, fetchFn: forbidden }), /^Error: GitHub 403 for \/repos\/octo\/demo\/issues$/);
+});
+
 test('trackingPorts route by the binding provider, not by any URL', async () => {
   assert.equal(repoProvider({}), 'gitea');
   assert.equal(repoProvider({ provider: 'github' }), 'github');

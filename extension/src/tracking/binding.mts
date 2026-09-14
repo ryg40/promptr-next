@@ -14,7 +14,7 @@
  * reading the same variables they always did.
  */
 import path from "node:path";
-import { defaultRepo, isValidTrackingRepo, parseGitRemote, type TrackingProvider } from "./gitea.mts";
+import { canonicalHost, defaultRepo, isValidTrackingRepo, parseGitRemote, type TrackingProvider } from "./gitea.mts";
 import { resolveTracker, TRACKER_ENV, type TrackerResolution } from "./config.mts";
 
 export interface TrackerBinding {
@@ -158,9 +158,9 @@ export function inferBindingFromRemote(remoteUrl: string | undefined, env: NodeJ
   if (remoteUrl === undefined) return undefined;
   const parsed = parseGitRemote(remoteUrl);
   if (!parsed) return undefined;
-  const host = normalizeHost(parsed.host).toLowerCase();
-  const githubHost = providerDefaultHost("github", env).toLowerCase();
-  const giteaHost = normalizeHost(defaultRepo(env).host).toLowerCase();
+  const host = canonicalHost(parsed.host);
+  const githubHost = canonicalHost(providerDefaultHost("github", env));
+  const giteaHost = canonicalHost(defaultRepo(env).host);
   let provider: TrackingProvider | undefined;
   if (host === githubHost || host === DEFAULT_GITHUB_HOST) provider = "github";
   else if (giteaHost !== "" && host === giteaHost) provider = "gitea";

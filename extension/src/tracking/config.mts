@@ -14,7 +14,7 @@
  * environment through this module. An unusable configuration is a visible
  * reason, never a silent fallback to the other provider.
  */
-import { defaultRepo, isValidTrackingRepo, parseGitRemote, type TrackingProvider, type TrackingRepo } from "./gitea.mts";
+import { canonicalHost, defaultRepo, isValidTrackingRepo, parseGitRemote, type TrackingProvider, type TrackingRepo } from "./gitea.mts";
 
 export interface TrackerConfig {
   readonly provider: TrackingProvider;
@@ -77,7 +77,7 @@ export function resolveTracker(env: NodeJS.ProcessEnv, gitRemote?: string): Trac
   }
   if ((owner === "" || name === "") && gitRemote !== undefined) {
     const parsed = parseGitRemote(gitRemote);
-    if (parsed && parsed.host.replace(/\/+$/, "").toLowerCase() === host.replace(/\/+$/, "").toLowerCase()) {
+    if (parsed && canonicalHost(parsed.host) === canonicalHost(host)) {
       owner = owner || parsed.owner;
       name = name || parsed.repo;
     }

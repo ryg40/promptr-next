@@ -13,6 +13,8 @@ const gt = { version: 1, provider: 'gitea', host: 'https://gitea.example.test', 
 const text = (b) => serializeTrackerBinding(b);
 const ENV = { GITEA_TOKEN: 'gitea-secret', GITHUB_TOKEN: 'github-secret' };
 /** A machine whose shell already names a Gitea instance; there is no baked-in host. */
+/** provider/host/owner/repo of a binding, or undefined. */
+function pick(b) { return b && [b.provider, b.host, b.owner, b.repo]; }
 const GITEA_ENV = { ...ENV, GITEA_HOST: 'https://gitea.example.test', GITEA_OWNER: 'octo', GITEA_REPO: 'promptr' };
 
 test('trackerBindingFiles places the project file under .promptr and the global file under the state root', () => {
@@ -103,7 +105,24 @@ test('inferBindingFromRemote recognises github.com, GITHUB_HOST, the Gitea host 
   assert.equal(inferBindingFromRemote('https://forge.example/o/r', {}, NOW), undefined);
   assert.equal(inferBindingFromRemote(undefined, {}, NOW), undefined);
   assert.equal(inferBindingFromRemote('not a url', {}, NOW), undefined);
-  function pick(b) { return b && [b.provider, b.host, b.owner, b.repo]; }
+});
+
+test('private GitHub remotes: www.github.com, ssh://, embedded credentials and trailing slashes all bind to github.com', () => {
+  // The clone form `www.github.com/ORGNAME/reponame.git` is the same tracker as github.com.
+  assert.deepEqual(pick(inferBindingFromRemote('https://www.github.com/ORGNAME/reponame.git', {}, NOW)), ['github', 'https://github.com', 'ORGNAME', 'reponame']);
+  assert.deepEqual(pick(inferBindingFromRemote('http://WWW.GitHub.com/ORGNAME/reponame.git/', {}, NOW)), ['github', 'https://github.com', 'ORGNAME', 'reponame']);
+  assert.deepEqual(pick(inferBindingFromRemote('git@www.github.com:ORGNAME/reponame.git', {}, NOW)), ['github', 'https://github.com', 'ORGNAME', 'reponame']);
+  assert.deepEqual(pick(inferBindingFromRemote('ssh://git@github.com/ORGNAME/reponame.git', {}, NOW)), ['github', 'https://github.com', 'ORGNAME', 'reponame']);
+  assert.deepEqual(pick(inferBindingFromRemote('ssh://git@github.com:22/ORGNAME/reponame', {}, NOW)), ['github', 'https://github.com', 'ORGNAME', 'reponame']);
+  // A token embedded in the clone URL is dropped, never carried into the binding.
+  const withCreds = inferBindingFromRemote('https://octo:ghp_secret@github.com/ORGNAME/reponame.git', {}, NOW);
+  assert.deepEqual(pick(withCreds), ['github', 'https://github.com', 'ORGNAME', 'reponame']);
+  assert.doesNotMatch(JSON.stringify(withCreds), /ghp_secret/);
+  // A user who set GITHUB_HOST to the www alias still matches a plain github.com remote.
+  assert.deepEqual(pick(inferBindingFromRemote('git@github.com:o/r.git', { GITHUB_HOST: 'https://www.github.com/' }, NOW)), ['github', 'https://github.com', 'o', 'r']);
+  // Only github.com folds its www alias; a self-hosted forge keeps the name it was given.
+  assert.equal(inferBindingFromRemote('https://www.forge.example/o/r.git', { GITEA_HOST: 'https://forge.example' }, NOW), undefined);
+  assert.deepEqual(pick(inferBindingFromRemote('https://www.forge.example/o/r.git', { GITEA_HOST: 'https://www.forge.example' }, NOW)), ['gitea', 'https://www.forge.example', 'o', 'r']);
 });
 
 test('parse/serialize round trip, key order, and rejection of bad provider/host', () => {

@@ -5,7 +5,16 @@ interfaces and on-disk formats may change without a migration path.
 
 ## Unreleased
 
-Nothing yet.
+### Fixed
+
+- **Private GitHub repositories cloned as `www.github.com/ORG/repo.git`.** The
+  `origin` remote parser now folds the `www.` alias (and a plain `http://`
+  scheme) of github.com onto `https://github.com`, so such a checkout binds to
+  its GitHub tracker instead of reporting *unbound*. `ssh://git@host/…` remotes
+  and https remotes carrying embedded credentials are also recognised; any
+  userinfo in the URL is dropped and never stored. A GitHub 404 read without
+  `GITHUB_TOKEN` now says "private repository? set GITHUB_TOKEN", since GitHub
+  hides private repositories behind 404 rather than 403.
 
 ## 0.1.0 — first public release
 
