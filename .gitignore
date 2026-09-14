@@ -1,0 +1,16 @@
+# Build output and installed dependencies are never committed.
+extension/node_modules
+extension/dist/
+
+# Private local continuation/checkpoint data (never credentials).
+.promptr/
+
+# Credentials and machine-local configuration.
+.env
+.env.*
+*.local.json
+
+# OS and editor noise.
+.DS_Store
+Thumbs.db
+*.swp
